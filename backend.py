@@ -91,6 +91,21 @@ async def health_check():
         logger.error(f"Health check failed: {e}")
         return JSONResponse({"status": "unhealthy", "error": str(e)}, status_code=503)
 
+@app.post("/test-upload")
+async def test_upload(file: UploadFile = File(...)):
+    """Test endpoint to debug file uploads"""
+    try:
+        file_content = await file.read()
+        return JSONResponse({
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "size": len(file_content),
+            "preview": file_content[:100].decode("utf-8", errors="ignore") if file_content else "Empty"
+        })
+    except Exception as e:
+        logger.error(f"Test upload error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.get("/stats")
 async def get_statistics():
     """Get statistics about stored failures"""
@@ -124,33 +139,71 @@ async def get_statistics():
 @app.post("/analyze-text")
 async def analyze_text(request: LogAnalysisRequest):
     """Analyze log content from text input"""
-    if not request.content or not request.content.strip():
-        raise HTTPException(status_code=400, detail="Content cannot be empty")
-    
-    if len(request.content) > 100000:  # Limit to 100KB
-        raise HTTPException(status_code=400, detail="Content too large (max 100KB)")
-    
-    return await _analyze_log_content(request.content)
+    try:
+        if not request.content:
+            raise HTTPException(status_code=400, detail="Content cannot be empty")
+        
+        content = request.content.strip()
+        if not content:
+            raise HTTPException(status_code=400, detail="Content cannot be empty (only whitespace)")
+        
+        if len(content) > 100000:  # Limit to 100KB
+            raise HTTPException(status_code=400, detail=f"Content too large ({len(content)} bytes, max 100KB)")
+        
+        logger.info(f"Processing text input, size: {len(content)} bytes")
+        return await _analyze_log_content(content)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing text: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error processing text: {str(e)}")
 
 @app.post("/analyze-log")
 async def analyze_log(file: UploadFile = File(...)):
     """Analyze log from file upload"""
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided")
-    
     try:
-        content = (await file.read()).decode("utf-8")
-        if not content.strip():
-            raise HTTPException(status_code=400, detail="File is empty")
+        # Check if file was provided (FastAPI will raise if File(...) is missing, but double-check)
+        if file is None:
+            raise HTTPException(status_code=400, detail="No file provided in request")
+        
+        # Read file content
+        file_content = await file.read()
+        
+        if not file_content or len(file_content) == 0:
+            raise HTTPException(status_code=400, detail="File is empty or could not be read (0 bytes)")
+        
+        # Try to decode with UTF-8, fallback to other encodings
+        try:
+            content = file_content.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                content = file_content.decode("latin-1")
+                logger.warning(f"File decoded with latin-1 instead of utf-8: {file.filename or 'unnamed'}")
+            except UnicodeDecodeError:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="File encoding not supported. Please use UTF-8 or Latin-1 encoded text files."
+                )
+        
+        if not content or not content.strip():
+            raise HTTPException(status_code=400, detail="File is empty (no text content after decoding)")
         
         if len(content) > 100000:  # Limit to 100KB
-            raise HTTPException(status_code=400, detail="File too large (max 100KB)")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"File too large ({len(content)} bytes, max 100KB). Please use a smaller file."
+            )
         
+        filename = file.filename or "unnamed_file"
+        logger.info(f"Processing file: {filename}, size: {len(content)} bytes, content_type: {file.content_type}")
         return await _analyze_log_content(content)
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text")
+    except HTTPException:
+        raise
+    except UnicodeDecodeError as e:
+        logger.error(f"Unicode decode error: {e}")
+        raise HTTPException(status_code=400, detail=f"File encoding error: {str(e)}")
     except Exception as e:
-        logger.error(f"Error reading file: {e}")
+        logger.error(f"Error reading file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 async def _analyze_log_content(content: str):
