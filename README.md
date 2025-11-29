@@ -13,7 +13,8 @@ An intelligent CI/CD failure analysis tool that uses AI to diagnose build failur
 - **Search Functionality**: Search past failures by text query
 - **Statistics Dashboard**: View analytics about stored failures
 - **Export History**: Download analysis history as CSV
-- **Enhanced UI**: Modern, responsive interface with loading states and error handling
+- **Modern UI**: Beautiful gradient-based interface with card layouts, animations, and professional styling
+- **Robust Error Handling**: Comprehensive error messages and validation with encoding support
 - **RESTful API**: FastAPI backend with health checks and statistics endpoints
 
 ## 🏗️ Architecture
@@ -33,13 +34,15 @@ The application consists of two main components:
    - Timestamp tracking for all analyses
 
 2. **Frontend (Streamlit)**:
-   - File upload interface
+   - Modern gradient-based UI with card layouts
+   - File upload interface with drag-and-drop support
    - Text input for direct log pasting
    - Search interface for past failures
-   - Statistics dashboard with metrics
-   - Results display with category, severity, analysis, and suggested fixes
-   - Analysis history with filtering and export
+   - Statistics dashboard with real-time metrics
+   - Beautiful results display with color-coded severity indicators
+   - Analysis history with filtering and CSV export
    - Real-time backend health monitoring
+   - Responsive design with smooth animations
 
 ## 📋 Prerequisites
 
@@ -113,14 +116,22 @@ The application consists of two main components:
 ### Web Interface
 
 1. Open the Streamlit app at http://localhost:8501
-2. Click "Upload CI Log" and select a log file (`.txt` or `.log`)
-3. Click "Analyze Log" to process the file
-4. View the results:
-   - **Category**: Type of failure detected
-   - **Severity**: High or Medium
-   - **Analysis**: Detailed explanation from the AI
-   - **Suggested Fix**: Actionable remediation steps
-   - **Match Type**: Whether it matched a previous failure or was newly analyzed
+2. Choose your input method:
+   - **Upload File**: Click "Upload File" tab and select a log file (`.txt` or `.log`)
+   - **Paste Text**: Click "Paste Text" tab and paste your log content directly
+   - **Search**: Click "Search Failures" tab to find similar past failures
+3. Click "Analyze Log" or "Analyze Text" to process
+4. View the beautiful results display:
+   - **Category**: Type of failure detected with gradient cards
+   - **Severity**: Color-coded severity (High=Red, Medium=Yellow, Low=Blue)
+   - **Analysis**: Detailed explanation from the AI in styled containers
+   - **Suggested Fix**: Actionable remediation steps with code blocks
+   - **Match Type**: Visual badges showing match type (Exact/Vector/LLM)
+   - **Similar Failures**: View related past failures if available
+5. Check the sidebar for:
+   - Backend health status
+   - Statistics dashboard
+   - Export history to CSV
 
 ### API Usage
 
@@ -169,6 +180,17 @@ curl "http://localhost:8000/health"
 curl "http://localhost:8000/stats"
 ```
 
+#### Test Upload (Debug)
+**Endpoint**: `POST /test-upload`
+
+**Request**:
+```bash
+curl -X POST "http://localhost:8000/test-upload" \
+  -F "file=@path/to/your/logfile.log"
+```
+
+Use this endpoint to debug file upload issues.
+
 **Response Example**:
 ```json
 {
@@ -204,23 +226,30 @@ curl "http://localhost:8000/stats"
 - ✅ **Statistics API**: Get insights about stored failures (categories, severities, counts)
 - ✅ **Text Input Endpoint**: Analyze logs without file upload
 - ✅ **Search Endpoint**: Find similar past failures by text query
-- ✅ **Better Error Handling**: Comprehensive error messages and validation
+- ✅ **Robust Error Handling**: Comprehensive error messages with specific details
+- ✅ **File Encoding Support**: Automatic UTF-8 and Latin-1 encoding detection with fallback
 - ✅ **Logging**: Detailed logging for debugging and monitoring
 - ✅ **Timestamp Tracking**: All analyses include timestamps
 - ✅ **Improved Duplicate Detection**: SHA-256 hashing for exact matches
 - ✅ **CORS Support**: Enable cross-origin requests
-- ✅ **Input Validation**: File size limits and content validation
+- ✅ **Input Validation**: File size limits (100KB), content validation, and empty file checks
+- ✅ **Test Endpoint**: `/test-upload` for debugging file upload issues
 
 ### Frontend Enhancements
-- ✅ **Multiple Input Methods**: Upload files or paste text directly
-- ✅ **Search Interface**: Search past failures with similarity scores
-- ✅ **Statistics Dashboard**: View metrics in the sidebar
-- ✅ **Health Monitoring**: Real-time backend status indicator
+- ✅ **Modern UI Design**: Beautiful gradient-based interface with purple/blue color scheme
+- ✅ **Card-Based Layouts**: Professional card designs with shadows and animations
+- ✅ **Multiple Input Methods**: Upload files or paste text directly with styled tabs
+- ✅ **Search Interface**: Search past failures with similarity scores and color-coded results
+- ✅ **Statistics Dashboard**: View metrics in a styled sidebar with glassmorphism effects
+- ✅ **Health Monitoring**: Real-time backend status indicator with visual feedback
 - ✅ **Enhanced History**: Filterable history with export to CSV
-- ✅ **Better UI/UX**: Loading states, error messages, and visual feedback
-- ✅ **Similar Failures Display**: View related past failures
-- ✅ **Wide Layout**: Better use of screen space
+- ✅ **Improved Error Handling**: Specific error messages for different failure scenarios
+- ✅ **Loading States**: Beautiful spinners and progress indicators
+- ✅ **Similar Failures Display**: View related past failures in expandable cards
+- ✅ **Wide Layout**: Better use of screen space with responsive design
 - ✅ **Export Functionality**: Download analysis history as CSV
+- ✅ **Color-Coded Severity**: Visual indicators (High=Red, Medium=Yellow, Low=Blue)
+- ✅ **Match Type Badges**: Visual badges showing analysis type (Exact/Vector/LLM)
 
 ## 🗂️ Failure Categories
 
@@ -242,6 +271,13 @@ The system automatically detects these failure types:
 
 The vector database (ChromaDB) is stored in the `./db` directory. This directory is automatically created and persists analyzed failures for future similarity searches.
 
+### File Support
+
+- **Supported Formats**: `.txt`, `.log` files
+- **Encoding**: UTF-8 (preferred) or Latin-1 (with automatic fallback)
+- **Size Limit**: Maximum 100KB per file
+- **Content**: Plain text log files only
+
 ## 📁 Project Structure
 
 ```
@@ -258,11 +294,30 @@ cicd-debugger/
 
 Sample log files are included in the `samples/` directory. You can upload these to test the system:
 
-- `jenkins_build_fail_1.log`
+- `jenkins_build_fail_1.log` - Maven dependency resolution failure
 - `jenkins_build_fail_2.log`
 - `jenkins_build_fail_3.log`
 - `jenkins_build_fail_4.log`
 - `jenkins_build_fail_5.log`
+
+### Troubleshooting
+
+If you encounter errors:
+
+1. **400 Bad Request**: 
+   - Check that the file is not empty
+   - Ensure file is UTF-8 or Latin-1 encoded
+   - Verify file size is under 100KB
+   - Use `/test-upload` endpoint to debug
+
+2. **503 Service Unavailable**:
+   - Verify `OPENAI_API_KEY` is set correctly
+   - Check backend logs for details
+
+3. **Connection Errors**:
+   - Ensure backend is running on port 8000
+   - Check firewall settings
+   - Verify CORS is enabled if accessing from different origin
 
 ## 🚢 AWS ECS Deployment
 
