@@ -9,23 +9,37 @@ An intelligent CI/CD failure analysis tool that uses AI to diagnose build failur
 - **Rule-Based Categorization**: Automatically categorizes failures (Test Failure, Dependency Issue, Build Script Error, Docker Failure, Credential/Permissions)
 - **Severity Assessment**: Assigns severity levels (High/Medium) based on failure type
 - **Knowledge Base**: Stores analyzed failures in a vector database for future reference
-- **Web Interface**: User-friendly Streamlit UI for uploading and analyzing logs
-- **RESTful API**: FastAPI backend for programmatic access
+- **Multiple Input Methods**: Upload files or paste log content directly
+- **Search Functionality**: Search past failures by text query
+- **Statistics Dashboard**: View analytics about stored failures
+- **Export History**: Download analysis history as CSV
+- **Enhanced UI**: Modern, responsive interface with loading states and error handling
+- **RESTful API**: FastAPI backend with health checks and statistics endpoints
 
 ## 🏗️ Architecture
 
 The application consists of two main components:
 
 1. **Backend (FastAPI)**: 
-   - `/analyze-log` endpoint that processes log files
+   - `/analyze-log` - Process log files
+   - `/analyze-text` - Process log content from text input
+   - `/search` - Search for similar past failures
+   - `/health` - Health check endpoint
+   - `/stats` - Statistics about stored failures
    - Vector database (ChromaDB) for similarity search
    - OpenAI integration for embeddings and LLM analysis
    - Rule-based failure categorization
+   - Comprehensive error handling and logging
+   - Timestamp tracking for all analyses
 
 2. **Frontend (Streamlit)**:
    - File upload interface
+   - Text input for direct log pasting
+   - Search interface for past failures
+   - Statistics dashboard with metrics
    - Results display with category, severity, analysis, and suggested fixes
-   - Analysis history tracking
+   - Analysis history with filtering and export
+   - Real-time backend health monitoring
 
 ## 📋 Prerequisites
 
@@ -110,6 +124,7 @@ The application consists of two main components:
 
 ### API Usage
 
+#### Analyze Log File
 **Endpoint**: `POST /analyze-log`
 
 **Request**:
@@ -118,7 +133,43 @@ curl -X POST "http://localhost:8000/analyze-log" \
   -F "file=@path/to/your/logfile.log"
 ```
 
-**Response**:
+#### Analyze Text Content
+**Endpoint**: `POST /analyze-text`
+
+**Request**:
+```bash
+curl -X POST "http://localhost:8000/analyze-text" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Your log content here..."}'
+```
+
+#### Search Past Failures
+**Endpoint**: `POST /search`
+
+**Request**:
+```bash
+curl -X POST "http://localhost:8000/search" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "test failure", "limit": 5}'
+```
+
+#### Health Check
+**Endpoint**: `GET /health`
+
+**Request**:
+```bash
+curl "http://localhost:8000/health"
+```
+
+#### Statistics
+**Endpoint**: `GET /stats`
+
+**Request**:
+```bash
+curl "http://localhost:8000/stats"
+```
+
+**Response Example**:
 ```json
 {
   "category": "Test Failure",
@@ -126,21 +177,50 @@ curl -X POST "http://localhost:8000/analyze-log" \
   "analysis": "The build failed due to failing unit tests...",
   "suggested_fix": "Run tests locally: `mvn test` or `npm test` and fix failing assertions.",
   "match_type": "Vector match",
-  "similarity": 0.15
+  "similarity": 0.15,
+  "timestamp": "2024-01-15T10:30:00",
+  "similar_failures": [...]
 }
 ```
 
 ## 🔍 How It Works
 
-1. **Log Upload**: User uploads a CI/CD failure log file
-2. **Embedding Generation**: The log is converted to a vector embedding using OpenAI's `text-embedding-3-small` model
-3. **Similarity Search**: The system searches ChromaDB for similar past failures (cosine similarity < 0.25)
-4. **Match Found**: If a similar failure exists, returns the stored analysis and fix
-5. **New Analysis**: If no match is found:
-   - GPT-4o-mini analyzes the log
+1. **Input**: User uploads a log file or pastes log content
+2. **Duplicate Check**: System checks if the exact log was analyzed before (using SHA-256 hash)
+3. **Embedding Generation**: The log is converted to a vector embedding using OpenAI's `text-embedding-3-small` model
+4. **Similarity Search**: The system searches ChromaDB for similar past failures (cosine similarity < 0.25)
+5. **Match Found**: If a similar failure exists, returns the stored analysis and fix with similarity scores
+6. **New Analysis**: If no match is found:
+   - GPT-4o-mini analyzes the log with structured prompts
    - Rule-based engine categorizes the failure
    - Severity is assigned based on category
+   - Timestamp is recorded
    - The failure and solution are stored in the vector database for future reference
+
+## 🆕 New Features & Improvements
+
+### Backend Enhancements
+- ✅ **Health Check Endpoint**: Monitor backend status and database connectivity
+- ✅ **Statistics API**: Get insights about stored failures (categories, severities, counts)
+- ✅ **Text Input Endpoint**: Analyze logs without file upload
+- ✅ **Search Endpoint**: Find similar past failures by text query
+- ✅ **Better Error Handling**: Comprehensive error messages and validation
+- ✅ **Logging**: Detailed logging for debugging and monitoring
+- ✅ **Timestamp Tracking**: All analyses include timestamps
+- ✅ **Improved Duplicate Detection**: SHA-256 hashing for exact matches
+- ✅ **CORS Support**: Enable cross-origin requests
+- ✅ **Input Validation**: File size limits and content validation
+
+### Frontend Enhancements
+- ✅ **Multiple Input Methods**: Upload files or paste text directly
+- ✅ **Search Interface**: Search past failures with similarity scores
+- ✅ **Statistics Dashboard**: View metrics in the sidebar
+- ✅ **Health Monitoring**: Real-time backend status indicator
+- ✅ **Enhanced History**: Filterable history with export to CSV
+- ✅ **Better UI/UX**: Loading states, error messages, and visual feedback
+- ✅ **Similar Failures Display**: View related past failures
+- ✅ **Wide Layout**: Better use of screen space
+- ✅ **Export Functionality**: Download analysis history as CSV
 
 ## 🗂️ Failure Categories
 
