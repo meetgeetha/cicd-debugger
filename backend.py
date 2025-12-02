@@ -166,6 +166,11 @@ async def analyze_log(file: UploadFile = File(...)):
         if file is None:
             raise HTTPException(status_code=400, detail="No file provided in request")
         
+        # Log file info for debugging
+        filename = file.filename or "unnamed_file"
+        content_type = file.content_type or "unknown"
+        logger.info(f"Received file upload: {filename}, content_type: {content_type}")
+        
         # Read file content
         file_content = await file.read()
         

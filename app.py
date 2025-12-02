@@ -3,6 +3,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import json
+import html
+import re
 
 BACKEND_URL = "http://localhost:8000"
 
@@ -21,11 +23,21 @@ st.markdown("""
         padding-top: 2rem;
     }
     
+    /* Fix text rendering */
+    .stMarkdown {
+        word-wrap: break-word;
+    }
+    
+    .stMarkdown p {
+        margin-bottom: 0.5rem;
+    }
+    
     /* Header styling */
     h1 {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        background-clip: text;
         font-size: 3rem;
         font-weight: 800;
         margin-bottom: 0.5rem;
@@ -153,6 +165,58 @@ st.markdown("""
         background: #f8f9fa;
         border-radius: 8px;
     }
+    
+    /* Fix content display */
+    div[data-testid="stMarkdownContainer"] {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    /* Ensure proper text wrapping in cards */
+    .result-card, .metric-container {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    /* Ensure markdown renders properly in styled containers */
+    div[data-testid="stMarkdownContainer"] ul,
+    div[data-testid="stMarkdownContainer"] ol {
+        margin: 0.5rem 0;
+        padding-left: 1.5rem;
+    }
+    
+    div[data-testid="stMarkdownContainer"] li {
+        margin: 0.25rem 0;
+        line-height: 1.6;
+    }
+    
+    div[data-testid="stMarkdownContainer"] p {
+        margin: 0.75rem 0;
+        line-height: 1.6;
+    }
+    
+    div[data-testid="stMarkdownContainer"] h1,
+    div[data-testid="stMarkdownContainer"] h2,
+    div[data-testid="stMarkdownContainer"] h3,
+    div[data-testid="stMarkdownContainer"] h4 {
+        margin: 1rem 0 0.5rem 0;
+        font-weight: 600;
+    }
+    
+    div[data-testid="stMarkdownContainer"] strong {
+        font-weight: 600;
+        color: #333;
+    }
+    
+    /* Hide empty divs that might be rendered from closing tags */
+    div:empty {
+        display: none !important;
+    }
+    
+    /* Ensure closing div tags don't create visible empty divs */
+    div[data-testid="stMarkdownContainer"]:has(> :only-child):empty {
+        display: none;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -161,6 +225,106 @@ if "history" not in st.session_state:
     st.session_state["history"] = []
 if "stats" not in st.session_state:
     st.session_state["stats"] = None
+
+def clean_html_tags(text):
+    """Remove HTML tags while preserving markdown formatting"""
+    if not text:
+        return ""
+    
+    text = str(text)
+    
+    # First, convert common HTML list structures to markdown before removing tags
+    # Handle ordered lists with proper numbering
+    def replace_ordered_list(match):
+        ol_content = match.group(1)
+        # Split by <li> tags and number them
+        items = re.split(r'<li[^>]*>', ol_content, flags=re.IGNORECASE)
+        items = [item.replace('</li>', '').strip() for item in items if item.strip()]
+        numbered = '\n'.join([f"{i+1}. {item}" for i, item in enumerate(items) if item])
+        return numbered + '\n'
+    
+    # Convert <ol> lists to numbered markdown
+    text = re.sub(r'<ol[^>]*>(.*?)</ol>', replace_ordered_list, text, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Convert <ul><li> to markdown bullets
+    text = re.sub(r'<ul[^>]*>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</ul>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<li[^>]*>', '- ', text, flags=re.IGNORECASE)
+    text = re.sub(r'</li>', '\n', text, flags=re.IGNORECASE)
+    
+    # Convert <p> tags to double newlines (paragraph breaks)
+    text = re.sub(r'<p[^>]*>', '\n\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</p>', '\n\n', text, flags=re.IGNORECASE)
+    
+    # Convert <br> and <br/> to newlines
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    
+    # Convert <strong> and <b> to markdown bold
+    text = re.sub(r'<strong[^>]*>', '**', text, flags=re.IGNORECASE)
+    text = re.sub(r'</strong>', '**', text, flags=re.IGNORECASE)
+    text = re.sub(r'<b[^>]*>', '**', text, flags=re.IGNORECASE)
+    text = re.sub(r'</b>', '**', text, flags=re.IGNORECASE)
+    
+    # Convert <em> and <i> to markdown italic
+    text = re.sub(r'<em[^>]*>', '*', text, flags=re.IGNORECASE)
+    text = re.sub(r'</em>', '*', text, flags=re.IGNORECASE)
+    text = re.sub(r'<i[^>]*>', '*', text, flags=re.IGNORECASE)
+    text = re.sub(r'</i>', '*', text, flags=re.IGNORECASE)
+    
+    # Convert <h1>-<h6> to markdown headers
+    for i in range(1, 7):
+        text = re.sub(rf'<h{i}[^>]*>', '\n' + '#' * i + ' ', text, flags=re.IGNORECASE)
+        text = re.sub(rf'</h{i}>', '\n', text, flags=re.IGNORECASE)
+    
+    # Now remove all remaining HTML tags (including malformed ones)
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    # Remove escaped HTML entities (multiple passes to catch nested cases)
+    for _ in range(3):  # Multiple passes to handle nested entities
+        text = re.sub(r'&lt;[^&]*&gt;', '', text)  # Remove &lt;...&gt;
+        text = re.sub(r'&lt;/?div[^&]*&gt;', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'&lt;/?[^&]*div[^&]*&gt;', '', text, flags=re.IGNORECASE)
+    
+    # Remove any remaining HTML entity fragments
+    text = text.replace('&lt;', '').replace('&gt;', '')
+    text = text.replace('</div>', '').replace('<div>', '')
+    text = text.replace('</div', '').replace('<div', '')
+    
+    # Remove any standalone closing tags
+    text = re.sub(r'</?[a-z]+[^>]*>', '', text, flags=re.IGNORECASE)
+    
+    # Fix numbered lists that might have lost formatting (e.g., "1. " pattern)
+    # Ensure numbered lists have proper spacing and are on their own lines
+    text = re.sub(r'(\d+)\.\s+', r'\n\1. ', text)  # Ensure numbered items start on new line
+    text = re.sub(r'\n(\d+)\.\s+', r'\n\1. ', text)  # Normalize numbered list format
+    
+    # Ensure bullet points have proper spacing and are on their own lines
+    text = re.sub(r'(?<!\n)-\s+', '\n- ', text)  # Ensure bullets start on new line (if not already)
+    text = re.sub(r'\n-\s+', '\n- ', text)  # Normalize bullet format
+    
+    # Ensure "**Solution:**" and similar patterns are preserved
+    # Make sure bold patterns are properly formatted
+    text = re.sub(r'\*\*([^*]+)\*\*', r'**\1**', text)  # Normalize bold
+    
+    # Clean up excessive whitespace but preserve intentional line breaks
+    # Don't collapse spaces within lines, but normalize line breaks
+    lines = text.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        # Preserve empty lines for paragraph breaks
+        if not line.strip():
+            cleaned_lines.append('')
+        else:
+            # Clean up multiple spaces but preserve single spaces
+            cleaned_line = re.sub(r'[ \t]+', ' ', line.strip())
+            cleaned_lines.append(cleaned_line)
+    
+    text = '\n'.join(cleaned_lines)
+    # Clean up excessive newlines (more than 2 consecutive)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = text.strip()
+    
+    return text
 
 def _display_results(data):
     """Display analysis results with modern, appealing design"""
@@ -183,15 +347,17 @@ def _display_results(data):
     
     with col1:
         category = data.get('category', 'Unknown')
+        category_escaped = html.escape(str(category))
         st.markdown(f"""
             <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                         padding: 1.5rem; 
                         border-radius: 12px; 
                         text-align: center;
                         color: white;
-                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        word-wrap: break-word;'>
                 <div style='font-size: 0.9rem; opacity: 0.9; margin-bottom: 0.5rem;'>CATEGORY</div>
-                <div style='font-size: 1.5rem; font-weight: 700;'>{category}</div>
+                <div style='font-size: 1.5rem; font-weight: 700;'>{category_escaped}</div>
             </div>
         """, unsafe_allow_html=True)
     
@@ -237,8 +403,8 @@ def _display_results(data):
                         color: white;
                         box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
                 <div style='font-size: 0.9rem; opacity: 0.9; margin-bottom: 0.5rem;'>MATCH TYPE</div>
-                <div style='font-size: 1.1rem; font-weight: 700;'>{match_type}</div>
-                <div style='font-size: 0.8rem; opacity: 0.9; margin-top: 0.5rem;'>Similarity: {similarity_display}</div>
+                <div style='font-size: 1.1rem; font-weight: 700; word-wrap: break-word;'>{html.escape(str(match_type))}</div>
+                <div style='font-size: 0.8rem; opacity: 0.9; margin-top: 0.5rem;'>Similarity: {html.escape(str(similarity_display))}</div>
             </div>
         """, unsafe_allow_html=True)
     
@@ -286,16 +452,23 @@ def _display_results(data):
     """, unsafe_allow_html=True)
     
     analysis_text = data.get("analysis", "No analysis available.")
+    # Clean the text using comprehensive HTML tag removal
+    analysis_clean = clean_html_tags(analysis_text)
+    
+    # Use Streamlit's native markdown with styled container
+    # Render markdown in a styled div - use a single structure to avoid empty divs
     st.markdown(f"""
         <div style='background: white; 
                     padding: 1.5rem; 
                     border-radius: 8px; 
                     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    line-height: 1.6;
-                    color: #333;'>
-            {analysis_text}
-        </div>
+                    margin: 1rem 0;
+                    border-left: 4px solid #26a69a;'>
     """, unsafe_allow_html=True)
+    # Render markdown content (this will be inside the div above)
+    st.markdown(analysis_clean)
+    # Close div with a comment to prevent empty div rendering
+    st.markdown("<!-- end analysis --></div>", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -311,20 +484,23 @@ def _display_results(data):
     """, unsafe_allow_html=True)
     
     fix_text = data.get("suggested_fix", "No fix suggested.")
+    # Clean the text using comprehensive HTML tag removal
+    fix_clean = clean_html_tags(fix_text)
+    
+    # Use Streamlit's native markdown with styled container
+    # Render markdown in a styled div - use a single structure to avoid empty divs
     st.markdown(f"""
         <div style='background: white; 
                     padding: 1.5rem; 
                     border-radius: 8px; 
                     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    line-height: 1.6;
-                    color: #333;'>
-            {fix_text}
-        </div>
+                    margin: 1rem 0;
+                    border-left: 4px solid #4caf50;'>
     """, unsafe_allow_html=True)
-    
-    # Code block for fix if available
-    if fix_text and fix_text != "No fix suggested.":
-        st.code(fix_text, language='text')
+    # Render markdown content (this will be inside the div above)
+    st.markdown(fix_clean)
+    # Close div with a comment to prevent empty div rendering
+    st.markdown("<!-- end fix --></div>", unsafe_allow_html=True)
     
     # Add to history
     st.session_state["history"].append({
@@ -386,31 +562,13 @@ with st.sidebar:
     
     if st.session_state["stats"]:
         stats = st.session_state["stats"]
-        st.markdown("""
-            <div style='background: rgba(255,255,255,0.15); 
-                        padding: 1.5rem; 
-                        border-radius: 10px; 
-                        margin: 1rem 0;
-                        backdrop-filter: blur(10px);'>
-            <h3 style='color: white; margin-top: 0;'>📈 Statistics</h3>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(f"""
-            <div style='background: rgba(255,255,255,0.3); 
-                        padding: 1rem; 
-                        border-radius: 8px; 
-                        text-align: center;
-                        margin: 0.5rem 0;
-                        color: white;'>
-                <div style='font-size: 0.9rem; opacity: 0.9;'>Total Failures</div>
-                <div style='font-size: 2rem; font-weight: 700;'>{stats.get('total_failures', 0)}</div>
-            </div>
-        """, unsafe_allow_html=True)
-        
+        # Build the categories HTML first
+        categories_html = ""
         if stats.get("categories"):
-            st.markdown("<div style='color: white; font-weight: 600; margin-top: 1rem;'>Top Categories:</div>", unsafe_allow_html=True)
+            categories_html = "<div style='color: white; font-weight: 600; margin-top: 1rem;'>Top Categories:</div>"
             for cat, count in list(stats.get("top_categories", {}).items())[:5]:
-                st.markdown(f"""
+                cat_escaped = html.escape(str(cat))
+                categories_html += f"""
                     <div style='background: rgba(255,255,255,0.2); 
                                 padding: 0.5rem 1rem; 
                                 border-radius: 6px; 
@@ -418,12 +576,31 @@ with st.sidebar:
                                 color: white;
                                 display: flex;
                                 justify-content: space-between;'>
-                        <span>{cat}</span>
+                        <span>{cat_escaped}</span>
                         <strong>{count}</strong>
                     </div>
-                """, unsafe_allow_html=True)
+                """
         
-        st.markdown("</div>", unsafe_allow_html=True)
+        # Use a single markdown call to avoid rendering closing tags as text
+        st.markdown(f"""
+            <div style='background: rgba(255,255,255,0.15); 
+                        padding: 1.5rem; 
+                        border-radius: 10px; 
+                        margin: 1rem 0;
+                        backdrop-filter: blur(10px);'>
+                <h3 style='color: white; margin-top: 0;'>📈 Statistics</h3>
+                <div style='background: rgba(255,255,255,0.3); 
+                            padding: 1rem; 
+                            border-radius: 8px; 
+                            text-align: center;
+                            margin: 0.5rem 0;
+                            color: white;'>
+                    <div style='font-size: 0.9rem; opacity: 0.9;'>Total Failures</div>
+                    <div style='font-size: 2rem; font-weight: 700;'>{stats.get('total_failures', 0)}</div>
+                </div>
+                {categories_html}
+            </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -504,14 +681,35 @@ with tab1:
         if st.button("🔍 Analyze Log", type="primary", use_container_width=True):
             try:
                 # Prepare file for upload
-                file_content = uploaded_file.getvalue()
-                if not file_content:
+                # Reset file pointer to beginning in case it was read before
+                uploaded_file.seek(0)
+                file_content = uploaded_file.read()
+                
+                if not file_content or len(file_content) == 0:
                     st.error("❌ File appears to be empty. Please select a valid log file.")
                 else:
-                    files = {"file": (uploaded_file.name, file_content, uploaded_file.type or "text/plain")}
+                    # Ensure we have a valid filename
+                    filename = uploaded_file.name or "logfile.log"
+                    # Determine content type - default to text/plain for .log and .txt files
+                    content_type = uploaded_file.type
+                    if not content_type:
+                        if filename.endswith('.log') or filename.endswith('.txt'):
+                            content_type = "text/plain"
+                        else:
+                            content_type = "application/octet-stream"
+                    
+                    # Prepare file tuple: (filename, content_bytes, content_type)
+                    # requests library expects bytes for file uploads
+                    files = {"file": (filename, file_content, content_type)}
+                    
                     with st.spinner("🔍 Analyzing log file... This may take a moment."):
                         try:
-                            resp = requests.post(f"{BACKEND_URL}/analyze-log", files=files, timeout=120)
+                            resp = requests.post(
+                                f"{BACKEND_URL}/analyze-log", 
+                                files=files, 
+                                timeout=120,
+                                headers={"Accept": "application/json"}
+                            )
                             if resp.status_code == 200:
                                 data = resp.json()
                                 _display_results(data)
@@ -523,6 +721,7 @@ with tab1:
                                 except:
                                     pass
                                 st.error(f"❌ Bad Request (400): {error_detail}")
+                                st.info(f"💡 File: {filename}, Size: {len(file_content)} bytes, Type: {content_type}")
                             elif resp.status_code == 503:
                                 st.error("❌ Service Unavailable: OpenAI API key not configured or backend issue.")
                             else:
@@ -533,8 +732,12 @@ with tab1:
                             st.error("❌ Cannot connect to backend. Make sure the backend is running on http://localhost:8000")
                         except Exception as e:
                             st.error(f"❌ Error: {str(e)}")
+                            import traceback
+                            st.code(traceback.format_exc(), language='text')
             except Exception as e:
                 st.error(f"❌ Failed to process file: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc(), language='text')
 
 with tab2:
     st.markdown("""
